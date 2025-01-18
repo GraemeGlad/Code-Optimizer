@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Transformer Pro</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
+     <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #1e40af;
+            --background-color: #f8fafc;
+            --card-background: #ffffff;
+            --text-color: #1e293b;
+            --border-color: #e2e8f0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: var(--background-color);
+            color: var(--text-color);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: var(--text-color);
+            opacity: 0.8;
+        }
+
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+            gap: 2rem;
+        }
+
+        .editor-card {
+            background: var(--card-background);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+        }
+
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .editor-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .CodeMirror {
+            border-radius: 6px;
+            height: 500px !important;
+            font-size: 14px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin: 2rem 0;
+            flex-wrap: wrap;
+        }
+
+        .button {
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            font-weight: 500;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .button-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .button-primary:hover {
+            background: var(--secondary-color);
+        }
+
+        .button-secondary {
+            background: white;
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+        }
+
+        .button-secondary:hover {
+            background: var(--background-color);
+        }
+
+        .stats-card {
+            background: var(--card-background);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 1rem;
+            border-radius: 6px;
+            background: var(--background-color);
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-color);
+            opacity: 0.8;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        #status {
+            text-align: center;
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+
+        .success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        #exportArea {
+            width: 100%;
+            height: 100px;
+            margin: 1rem 0;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-family: monospace;
+            display: none;
+        }
+
+        .examples-dropdown {
+            width: 200px;
+            padding: 0.5rem;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            margin-right: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Code Transformer Pro</h1>
+        <p>Compress and optimize your JavaScript code while maintaining functionality</p>
+    </div>
+
+    <div class="controls">
+        <select id="exampleSelect" class="examples-dropdown">
+            <option value="">Select an example...</option>
+            <option value="factorial">Factorial Calculator</option>
+            <option value="sorting">Sorting Algorithm</option>
+            <option value="fibonacci">Fibonacci Sequence</option>
+        </select>
+        <button class="button button-primary" id="compressButton">Compress Code</button>
+        <button class="button button-secondary" id="decompressButton">Decompress Code</button>
+        <button class="button button-secondary" id="exportButton">Export Compressed</button>
+        <button class="button button-secondary" id="importButton">Import Code</button>
+        <button class="button button-primary" id="optimizeForAIButton">Optimize for AI</button>
+    </div>
+
+    <div class="main-container">
+        <div class="editor-card">
+            <div class="editor-header">
+                <span class="editor-title">Source Code</span>
+                <button class="button button-secondary" id="formatButton">Format Code</button>
+            </div>
+            <textarea id="humanCode"></textarea>
+        </div>
+        
+        <div class="editor-card">
+            <div class="editor-header">
+                <span class="editor-title">Transformed Code</span>
+                <button class="button button-secondary" id="copyButton">Copy Code</button>
+            </div>
+            <textarea id="aiCode"></textarea>
+        </div>
+    </div>
+
+    <div class="stats-card">
+        <div class="stat-item">
+            <div class="stat-label">Original Size</div>
+            <div class="stat-value"><span id="originalSize">0</span> bytes</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-label">Transformed Size</div>
+            <div class="stat-value"><span id="optimizedSize">0</span> bytes</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-label">Reduction</div>
+            <div class="stat-value"><span id="reduction">0</span>%</div>
+        </div>
+    </div>
+
+    <div id="status"></div>
+    <textarea id="exportArea" placeholder="Paste compressed code here to import..."></textarea>
+
+    <script>
+        class ExtremeCodeTransformer {
+            constructor() {
+                this.variableMap = new Map();
+                this.stringLUT = {};
+                this.nextVarId = 0;
+                this.reservedWords = new Set([
+                    'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 
+                    'default', 'delete', 'do', 'else', 'export', 'extends', 'finally', 
+                    'for', 'function', 'if', 'import', 'in', 'instanceof', 'new', 'return', 
+                    'super', 'switch', 'this', 'throw', 'try', 'typeof', 'var', 'void', 
+                    'while', 'with', 'yield', 'enum', 'implements', 'interface', 'let', 
+                    'package', 'private', 'protected', 'public', 'static', 'await', 
+                    'abstract', 'boolean', 'byte', 'char', 'double', 'final', 'float', 
+                    'goto', 'int', 'long', 'native', 'short', 'synchronized', 'throws', 
+                    'transient', 'volatile'
+                ]);
+            }
+
+            generateVarName() {
+                const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_$';
+                let id = this.nextVarId++;
+                let name = '';
+                do {
+                    name = chars[id % chars.length] + name;
+                    id = Math.floor(id / chars.length) - 1;
+                } while (id >= 0);
+                return name;
+            }
+
+            createLUT(code) {
+                const strings = [...new Set(code.match(/(["'`])(?:\\.|[^\1])*?\1/g) || [])];
+                strings.forEach((str, i) => {
+                    const key = `_s${i}`;
+                    this.stringLUT[key] = str;
+                    code = code.replaceAll(str, key);
+                });
+                return code;
+            }
+
+            minifyVariables(code) {
+                const varRegex = /\b([a-zA-Z_$][a-zA-Z0-9_$]*)\b/g;
+                let match;
+                while ((match = varRegex.exec(code)) !== null) {
+                    const varName = match[1];
+                    if (!this.reservedWords.has(varName) && !this.variableMap.has(varName)) {
+                        this.variableMap.set(varName, this.generateVarName());
+                    }
+                }
+                this.variableMap.forEach((shortName, originalName) => {
+                    const regex = new RegExp(`\\b${originalName}\\b`, 'g');
+                    code = code.replace(regex, shortName);
+                });
+                return code;
+            }
+
+            compress(code) {
+                code = code
+                    .replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '') // Remove comments
+                    .replace(/\s+/g, ' ') // Collapse whitespace
+                    .replace(/;\s*}/g, '}') // Remove unnecessary semicolons
+                    .replace(/\s*{\s*/g, '{') // Remove spaces around braces
+                    .replace(/\s*}\s*/g, '}') // Remove spaces around braces
+                    .replace(/\s*\(\s*/g, '(') // Remove spaces around parentheses
+                    .replace(/\s*\)\s*/g, ')') // Remove spaces around parentheses
+                    .replace(/\s*,\s*/g, ',') // Remove spaces around commas
+                    .replace(/\s*;\s*/g, ';') // Remove spaces around semicolons
+                    .replace(/true/g, '!0') // Replace true with !0
+                    .replace(/false/g, '!1') // Replace false with !1
+                    .replace(/\bendefined\b/g, 'void 0') // Replace undefined with void 0
+                    .replace(/\bfunction\b/g, 'f') // Replace function with f
+                    .replace(/\breturn\b/g, 'r'); // Replace return with r
+
+                code = this.createLUT(code);
+                code = this.minifyVariables(code);
+                return {
+                    compressedCode: code,
+                    variableMap: this.variableMap,
+                    stringLUT: this.stringLUT
+                };
+            }
+
+            decompress(data) {
+                let { compressedCode, variableMap, stringLUT } = data;
+
+                // Restore variable names
+                variableMap.forEach((shortName, originalName) => {
+                    const regex = new RegExp(`\\b${shortName}\\b`, 'g');
+                    compressedCode = compressedCode.replace(regex, originalName);
+                });
+
+                // Restore strings
+                Object.entries(stringLUT).forEach(([key, value]) => {
+                    compressedCode = compressedCode.replaceAll(key, value);
+                });
+
+                return this.formatCode(compressedCode);
+            }
+
+            formatCode(code) {
+                let formatted = '';
+                let indent = 0;
+                let inString = false;
+                let stringChar = '';
+                
+                for (let i = 0; i < code.length; i++) {
+                    const char = code[i];
+                    
+                    // Handle strings
+                    if ((char === '"' || char === "'" || char === '`') && code[i - 1] !== '\\') {
+                        if (!inString) {
+                            inString = true;
+                            stringChar = char;
+                        } else if (char === stringChar) {
+                            inString = false;
+                        }
+                    }
+                    
+                    if (!inString) {
+                        // Handle indentation
+                        if (char === '{') {
+                            formatted += char + '\n' + '    '.repeat(++indent);
+                        } else if (char === '}') {
+                            formatted = formatted.trimEnd() + '\n' + '    '.repeat(--indent) + char;
+                        } else if (char === ';') {
+                            formatted += char + '\n' + '    '.repeat(indent);
+                        } else if (char === '\n') {
+                            formatted += '\n' + '    '.repeat(indent);
+                        } else {
+                            formatted += char;
+                        }
+                    } else {
+                        formatted += char;
+                    }
+                }
+                
+                return formatted
+                    .replace(/\n\s*\n/g, '\n\n')
+                    .replace(/^\s+|\s+$/g, '');
+            }
+        }
+
+        // Initialize the transformer
+        const transformer = new ExtremeCodeTransformer();
+        let compressionData = null;
+
+        // Initialize CodeMirror editors
+        const humanEditor = CodeMirror.fromTextArea(document.getElementById('humanCode'), {
+            mode: 'javascript',
+            theme: 'monokai',
+            lineNumbers: true
+        });
+
+        const aiEditor = CodeMirror.fromTextArea(document.getElementById('aiCode'), {
+            mode: 'javascript',
+            theme: 'monokai',
+            lineNumbers: true,
+            readOnly: true
+        });
+
+        // Example code snippets
+        const examples = {
+            factorial: `// Calculate factorial
+function calculateFactorial(number) {
+    if (number === 0 || number === 1) {
+        return 1;
+    }
+    return number * calculateFactorial(number - 1);
+}
+console.log("Factorial:", calculateFactorial(5));`,
+            sorting: `// Bubble Sort Algorithm
+function bubbleSort(arr) {
+    let n = arr.length;
+    for (let i = 0; i < n - 1; i++) {
+        for (let j = 0; j < n - i - 1; j++) {
+            if (arr[j] > arr[j + 1]) {
+                [arr[j], arr[j + 1]] = [arr[j + 1], arr[j]];
+            }
+        }
+    }
+    return arr;
+}
+console.log("Sorted Array:", bubbleSort([64, 34, 25, 12, 22, 11, 90]));`,
+            fibonacci: `// Fibonacci Sequence
+function fibonacci(n) {
+    if (n <= 1) return n;
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+console.log("Fibonacci:", fibonacci(10));`
+        };
+
+        // Load example code
+        document.getElementById('exampleSelect').addEventListener('change', (e) => {
+            const example = e.target.value;
+            if (example && examples[example]) {
+                humanEditor.setValue(examples[example]);
+            }
+        });
+
+        // Compress code
+        document.getElementById('compressButton').addEventListener('click', () => {
+            const input = humanEditor.getValue();
+            compressionData = transformer.compress(input);
+            aiEditor.setValue(compressionData.compressedCode);
+            updateFileStats(input, compressionData.compressedCode);
+            updateStatus('Code compressed successfully!');
+        });
+
+        // Decompress code
+        document.getElementById('decompressButton').addEventListener('click', () => {
+            if (!compressionData) {
+                updateStatus('No compressed code to decompress!', true);
+                return;
+            }
+            const decompressed = transformer.decompress(compressionData);
+            humanEditor.setValue(decompressed);
+            updateStatus('Code decompressed successfully!');
+        });
+
+        // Export compressed code
+        document.getElementById('exportButton').addEventListener('click', () => {
+            const exportArea = document.getElementById('exportArea');
+            exportArea.style.display = 'block';
+            exportArea.value = aiEditor.getValue();
+            exportArea.select();
+            document.execCommand('copy');
+            updateStatus('Compressed code copied to clipboard!');
+        });
+
+        // Import compressed code
+        document.getElementById('importButton').addEventListener('click', () => {
+            const exportArea = document.getElementById('exportArea');
+            exportArea.style.display = 'block';
+            if (exportArea.style.display === 'none') {
+                exportArea.style.display = 'block';
+            } else {
+                try {
+                    const importedData = exportArea.value;
+                    aiEditor.setValue(importedData);
+                    exportArea.style.display = 'none';
+                    updateStatus('Compressed code imported successfully!');
+                } catch (error) {
+                    updateStatus('Failed to import code: ' + error.message, true);
+                }
+            }
+        });
+
+        // Optimize code for AI
+        document.getElementById('optimizeForAIButton').addEventListener('click', () => {
+            const input = humanEditor.getValue();
+            const optimized = transformer.optimizeForAI(input);
+            aiEditor.setValue(optimized);
+            updateFileStats(input, optimized);
+            updateStatus('Code optimized for AI successfully!');
+        });
+
+        // Format code
+        document.getElementById('formatButton').addEventListener('click', () => {
+            const input = humanEditor.getValue();
+            const formatted = transformer.formatCode(input);
+            humanEditor.setValue(formatted);
+            updateStatus('Code formatted successfully!');
+        });
+
+        // Copy transformed code
+        document.getElementById('copyButton').addEventListener('click', () => {
+            const transformedCode = aiEditor.getValue();
+            navigator.clipboard.writeText(transformedCode);
+            updateStatus('Transformed code copied to clipboard!');
+        });
+
+        // Function to calculate file size in bytes
+        function calculateFileSize(text) {
+            return new Blob([text]).size;
+        }
+
+        // Function to update file size stats
+        function updateFileStats(originalText, optimizedText) {
+            const originalSize = calculateFileSize(originalText);
+            const optimizedSize = calculateFileSize(optimizedText);
+            const reduction = ((originalSize - optimizedSize) / originalSize * 100).toFixed(2);
+
+            document.getElementById('originalSize').textContent = originalSize;
+            document.getElementById('optimizedSize').textContent = optimizedSize;
+            document.getElementById('reduction').textContent = reduction;
+        }
+
+        // Function to update status messages
+        function updateStatus(message, isError = false) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = isError ? 'error' : 'success';
+        }
+    </script>
+</body>
+</html>
