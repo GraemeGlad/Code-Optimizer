@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Honeycomb Data Storage Analyzer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        textarea { width: 100%; min-height: 100px; margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background-color: #2196F3; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin: 5px; }
+        button:disabled { background-color: #ccc; }
+        .metrics { background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 15px 0; }
+        #dataCanvas { border: 1px solid #ddd; margin: 10px 0; max-width: 100%; }
+        #reconstructedImage { max-width: 100%; display: none; margin: 10px 0; }
+        .metric-item { margin: 5px 0; padding: 5px; border-bottom: 1px solid #eee; }
+        .drop-zone { border: 2px dashed #2196F3; border-radius: 4px; padding: 20px; text-align: center; margin: 20px 0; background-color: #f8f9fa; cursor: pointer; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #eee; border-radius: 4px; }
+        #status { margin: 10px 0; padding: 5px; display: none; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Honeycomb Data Storage Analyzer</h2>
+        
+        <div class="section">
+            <h3>Encode Data</h3>
+            <textarea id="inputText" placeholder="Enter text to analyze or load from file..."></textarea>
+            <input type="file" id="textFileInput" accept=".txt,.odt" style="margin: 10px 0;">
+            <input type="file" id="imageFileInput" accept="image/*" style="margin: 10px 0;">
+            <button id="analyzeBtn">Analyze & Store Text</button>
+            <button id="analyzeImageBtn">Analyze & Store Image</button>
+            <button id="saveBtn" disabled>Save Image</button>
+            <button id="saveBinaryBtn" disabled>Save Binary</button>
+            <div id="status"></div>
+
+            <div class="metrics" id="metrics" style="display: none">
+                <h3>Storage Metrics</h3>
+                <div class="metric-item">Data Type: <span id="dataType">N/A</span></div>
+                <div class="metric-item">Original Size: <span id="originalSize">0</span> bytes</div>
+                <div class="metric-item">Compressed Size: <span id="compressedSize">0</span> bytes</div>
+                <div class="metric-item">Image Dimensions: <span id="dimensions">0x0</span> pixels</div>
+                <div class="metric-item">Storage Efficiency: <span id="efficiency">0</span>%</div>
+                <div class="metric-item">Compression Ratio: <span id="compressionRatio">0</span>:1</div>
+                <div class="metric-item">Data Density: <span id="density">0</span> bytes/pixel</div>
+            </div>
+
+            <canvas id="dataCanvas"></canvas>
+            <img id="reconstructedImage">
+            
+            <div>
+                <button id="verifyBtn" disabled>Verify Data</button>
+                <div id="verificationResult"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Decode Data</h3>
+            <div class="drop-zone" id="dropZone">
+                Drop image here or click to upload
+                <input type="file" id="fileInput" accept="image/*" style="display: none">
+            </div>
+            <div class="drop-zone" id="binaryDropZone">
+                Drop binary file here or click to upload
+                <input type="file" id="binaryFileInput" accept=".bin" style="display: none">
+            </div>
+            <textarea id="decodedText" readonly placeholder="Decoded text or image data will appear here..."></textarea>
+            <div id="decodeMetrics" class="metrics" style="display: none">
+                <h3>Decode Metrics</h3>
+                <div class="metric-item">Image Size: <span id="decodedImageSize">0</span> pixels</div>
+                <div class="metric-item">Recovered Data Size: <span id="recoveredSize">0</span> bytes</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class HoneycombStorage {
+            constructor() {
+                this.displayCanvas = document.getElementById('dataCanvas');
+                this.displayCtx = this.displayCanvas.getContext('2d');
+                this.dataCanvas = document.createElement('canvas');
+                this.dataCtx = this.dataCanvas.getContext('2d', { willReadFrequently: true });
+                this.textCanvas = document.createElement('canvas');
+                this.textCtx = this.textCanvas.getContext('2d', { willReadFrequently: true });
+                this.imageCanvas = document.createElement('canvas');
+                this.imageCtx = this.imageCanvas.getContext('2d', { willReadFrequently: true });
+                this.metrics = {};
+                this.size = 200;
+                this.textCompressed = null;
+                this.imageCompressed = null;
+                this.textOriginal = '';
+                this.imageWidth = 0;
+                this.imageHeight = 0;
+                this.currentType = '';
+            }
+
+            async storeText(text) {
+                console.log('Storing text, length:', text.length);
+                console.time('Store Text');
+                const encoder = new TextEncoder();
+                const originalData = encoder.encode(text);
+                console.log('Original text length:', originalData.length);
+                const compressed = pako.deflate(originalData, { level: 9 });
+                console.log('Compressed text length:', compressed.length);
+                
+                const pixelsNeeded = Math.ceil(compressed.length / 3);
+                const dimension = Math.ceil(Math.sqrt(pixelsNeeded));
+                console.log('Text pixels needed:', pixelsNeeded, 'Dimension:', dimension);
+                
+                this.textCanvas.width = dimension;
+                this.textCanvas.height = dimension;
+                const imageData = this.textCtx.createImageData(dimension, dimension);
+                
+                const dataView = new Uint8Array(imageData.data.buffer);
+                for (let i = 0; i < compressed.length; i += 3) {
+                    const pixelIndex = Math.floor(i / 3) * 4;
+                    dataView[pixelIndex] = compressed[i] || 0;
+                    dataView[pixelIndex + 1] = compressed[i + 1] || 0;
+                    dataView[pixelIndex + 2] = compressed[i + 2] || 0;
+                    dataView[pixelIndex + 3] = 255;
+                }
+                this.textCtx.putImageData(imageData, 0, 0);
+                this.textCompressed = compressed;
+                this.textOriginal = text;
+                this.currentType = 'text';
+                this.updateMetrics();
+                console.timeEnd('Store Text');
+            }
+
+            async storeImage(file) {
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        console.log('Image loaded, dimensions:', img.width, 'x', img.height);
+                        this.imageWidth = img.width;
+                        this.imageHeight = img.height;
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        const imageData = ctx.getImageData(0, 0, img.width, img.height);
+                        const data = imageData.data;
+                        console.log('Image data length:', data.length);
+
+                        const widthHex = img.width.toString(16).padStart(4, '0');
+                        const heightHex = img.height.toString(16).padStart(4, '0');
+                        let text = widthHex + heightHex;
+                        for (let i = 0; i < data.length; i += 4) {
+                            const r = data[i].toString(16).padStart(2, '0');
+                            const g = data[i + 1].toString(16).padStart(2, '0');
+                            const b = data[i + 2].toString(16).padStart(2, '0');
+                            text += r + g + b;
+                        }
+                        console.log('Hex text length with dimensions:', text.length);
+
+                        console.time('Store Image');
+                        const encoder = new TextEncoder();
+                        const originalData = encoder.encode(text);
+                        const compressed = pako.deflate(originalData, { level: 9 });
+                        console.log('Compressed image length:', compressed.length);
+                        
+                        const pixelsNeeded = Math.ceil(compressed.length / 3);
+                        const dimension = Math.ceil(Math.sqrt(pixelsNeeded));
+                        console.log('Image pixels needed:', pixelsNeeded, 'Dimension:', dimension);
+                        
+                        this.imageCanvas.width = dimension;
+                        this.imageCanvas.height = dimension;
+                        const imageDataImg = this.imageCtx.createImageData(dimension, dimension);
+                        
+                        const dataView = new Uint8Array(imageDataImg.data.buffer);
+                        for (let i = 0; i < compressed.length; i += 3) {
+                            const pixelIndex = Math.floor(i / 3) * 4;
+                            dataView[pixelIndex] = compressed[i] || 0;
+                            dataView[pixelIndex + 1] = compressed[i + 1] || 0;
+                            dataView[pixelIndex + 2] = compressed[i + 2] || 0;
+                            dataView[pixelIndex + 3] = 255;
+                        }
+                        this.imageCtx.putImageData(imageDataImg, 0, 0);
+                        this.imageCompressed = compressed;
+                        this.currentType = 'image';
+                        this.updateMetrics();
+                        console.timeEnd('Store Image');
+                        resolve();
+                    };
+                    img.onerror = () => alert('Failed to load image');
+                    img.src = URL.createObjectURL(file);
+                });
+            }
+
+            updateMetrics() {
+                const isText = this.currentType === 'text' && this.textCompressed;
+                const isImage = this.currentType === 'image' && this.imageCompressed;
+                const compressedSize = isText ? this.textCompressed.length : (isImage ? this.imageCompressed.length : 0);
+                const dimension = isText ? this.textCanvas.width : (isImage ? this.imageCanvas.width : 0);
+                const originalSize = isText ? this.textOriginal.length : (isImage ? (this.imageWidth * this.imageHeight * 6 + 8) : 0);
+
+                this.metrics = {
+                    dataType: isText ? 'Text' : (isImage ? 'Image' : 'N/A'),
+                    originalSize: originalSize,
+                    compressedSize: compressedSize,
+                    dimension: dimension,
+                    pixelsUsed: Math.ceil(compressedSize / 3),
+                    totalPixels: dimension * dimension,
+                    efficiency: compressedSize ? ((Math.ceil(compressedSize / 3) / (dimension * dimension)) * 100).toFixed(2) : 0,
+                    compressionRatio: originalSize && compressedSize ? (originalSize / compressedSize).toFixed(2) : 0,
+                    density: compressedSize && dimension ? (compressedSize / (dimension * dimension)).toFixed(2) : 0
+                };
+
+                this.dataCanvas.width = dimension;
+                this.dataCanvas.height = dimension;
+                this.dataCtx.clearRect(0, 0, dimension, dimension);
+                if (isText) {
+                    this.dataCtx.drawImage(this.textCanvas, 0, 0);
+                } else if (isImage) {
+                    this.dataCtx.drawImage(this.imageCanvas, 0, 0);
+                }
+
+                this.displayCanvas.width = this.size * 2;
+                this.displayCanvas.height = this.size * 2;
+                this.displayCtx.fillStyle = 'white';
+                this.displayCtx.fillRect(0, 0, this.displayCanvas.width, this.displayCanvas.height);
+                this.displayCtx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = (Math.PI / 3) * i - Math.PI / 2;
+                    const x = this.size + this.size * Math.cos(angle);
+                    const y = this.size + this.size * Math.sin(angle);
+                    if (i === 0) this.displayCtx.moveTo(x, y);
+                    else this.displayCtx.lineTo(x, y);
+                }
+                this.displayCtx.closePath();
+                this.displayCtx.strokeStyle = '#000';
+                this.displayCtx.lineWidth = 2;
+                this.displayCtx.stroke();
+                this.displayCtx.clip();
+                this.displayCtx.drawImage(this.dataCanvas, 0, 0, this.displayCanvas.width, this.displayCanvas.height);
+
+                this.updateMetricsDisplay();
+            }
+
+            async verify() {
+                let textResult = '';
+                let imageResult = '';
+                if (this.textCompressed) {
+                    textResult = await this.decodeFromImageData(this.textCtx.getImageData(0, 0, this.textCanvas.width, this.textCanvas.height));
+                    document.getElementById('decodedText').value = textResult;
+                } else {
+                    document.getElementById('decodedText').value = 'No text data';
+                }
+                if (this.imageCompressed) {
+                    imageResult = await this.decodeFromImageData(this.imageCtx.getImageData(0, 0, this.imageCanvas.width, this.imageCanvas.height));
+                    document.getElementById('reconstructedImage').src = imageResult;
+                    document.getElementById('reconstructedImage').style.display = 'block';
+                } else {
+                    document.getElementById('reconstructedImage').style.display = 'none';
+                }
+                return { text: textResult, image: imageResult };
+            }
+
+            async decodeFromImageData(imageData) {
+                const data = imageData.data;
+                console.log('Decoding image data, length:', data.length);
+                const compressed = new Uint8Array(Math.ceil(data.length / 4) * 3);
+                let compressedIndex = 0;
+                for (let i = 0; i < data.length; i += 4) {
+                    compressed[compressedIndex++] = data[i];
+                    compressed[compressedIndex++] = data[i + 1];
+                    compressed[compressedIndex++] = data[i + 2];
+                }
+                
+                let endIndex = compressed.length;
+                while (endIndex > 0 && compressed[endIndex - 1] === 0) endIndex--;
+                const trimmedCompressed = compressed.subarray(0, endIndex);
+                console.log('Trimmed compressed length:', trimmedCompressed.length);
+                
+                try {
+                    const decompressed = pako.inflate(trimmedCompressed);
+                    const text = new TextDecoder().decode(decompressed);
+                    console.log('Decoded text length:', text.length);
+                    if (text.match(/^[0-9a-fA-F]{8,}$/)) {
+                        const width = parseInt(text.slice(0, 4), 16);
+                        const height = parseInt(text.slice(4, 8), 16);
+                        const hexData = text.slice(8);
+                        console.log('Reconstructing image, dimensions:', width, 'x', height, 'hexData length:', hexData.length);
+                        const expectedLength = width * height * 6;
+                        if (hexData.length !== expectedLength) {
+                            console.error('Hex data length mismatch:', hexData.length, 'vs expected:', expectedLength);
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        const imageData = ctx.createImageData(width, height);
+                        const pixelCount = width * height;
+                        for (let i = 0; i < pixelCount; i++) {
+                            const hexIndex = i * 6;
+                            if (hexIndex + 6 > hexData.length) break;
+                            const pixelIndex = i * 4;
+                            const r = parseInt(hexData.slice(hexIndex, hexIndex + 2), 16);
+                            const g = parseInt(hexData.slice(hexIndex + 2, hexIndex + 4), 16);
+                            const b = parseInt(hexData.slice(hexIndex + 4, hexIndex + 6), 16);
+                            imageData.data[pixelIndex] = r;
+                            imageData.data[pixelIndex + 1] = g;
+                            imageData.data[pixelIndex + 2] = b;
+                            imageData.data[pixelIndex + 3] = 255;
+                        }
+                        ctx.putImageData(imageData, 0, 0);
+                        const imgUrl = canvas.toDataURL('image/png');
+                        console.log('Reconstructed Image URL length:', imgUrl.length);
+                        return imgUrl;
+                    }
+                    return text;
+                } catch (error) {
+                    throw new Error('Data decoding failed: ' + error.message);
+                }
+            }
+
+            updateMetricsDisplay() {
+                document.getElementById('dataType').textContent = this.metrics.dataType;
+                document.getElementById('originalSize').textContent = this.metrics.originalSize.toLocaleString();
+                document.getElementById('compressedSize').textContent = this.metrics.compressedSize.toLocaleString();
+                document.getElementById('dimensions').textContent = `${this.metrics.dimension}x${this.metrics.dimension}`;
+                document.getElementById('efficiency').textContent = this.metrics.efficiency;
+                document.getElementById('compressionRatio').textContent = this.metrics.compressionRatio;
+                document.getElementById('density').textContent = this.metrics.density;
+                document.getElementById('metrics').style.display = 'block';
+            }
+
+            async decodeFromFile(file) {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        this.dataCanvas.width = img.width;
+                        this.dataCanvas.height = img.height;
+                        this.dataCtx.putImageData(imageData, 0, 0);
+                        this.verify().then((result) => {
+                            document.getElementById('decodedImageSize').textContent = `${img.width}x${img.height}`;
+                            document.getElementById('recoveredSize').textContent = (result.text.length + result.image.length).toLocaleString();
+                            document.getElementById('decodeMetrics').style.display = 'block';
+                            resolve(result);
+                        }).catch(reject);
+                    };
+                    img.onerror = () => reject(new Error('Failed to load image'));
+                    img.src = URL.createObjectURL(file);
+                });
+            }
+        }
+
+        const storage = new HoneycombStorage();
+        let originalText = '';
+        let compressedData = null;
+
+        function showStatus(message, isError = false) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = isError ? 'error' : 'success';
+            status.style.display = 'block';
+            setTimeout(() => status.style.display = 'none', 3000);
+        }
+
+        document.getElementById('analyzeBtn').addEventListener('click', async () => {
+            const textFile = document.getElementById('textFileInput').files[0];
+            originalText = document.getElementById('inputText').value;
+            if (!originalText && !textFile) {
+                alert('Please enter text or select a text file first');
+                return;
+            }
+            await storage.storeText(originalText);
+            document.getElementById('saveBtn').disabled = false;
+            document.getElementById('saveBinaryBtn').disabled = false;
+            document.getElementById('verifyBtn').disabled = false;
+        });
+
+        document.getElementById('analyzeImageBtn').addEventListener('click', async () => {
+            const file = document.getElementById('imageFileInput').files[0];
+            if (!file) {
+                alert('Please select an image file first');
+                return;
+            }
+            await storage.storeImage(file);
+            document.getElementById('saveBtn').disabled = false;
+            document.getElementById('saveBinaryBtn').disabled = false;
+            document.getElementById('verifyBtn').disabled = false;
+        });
+
+        document.getElementById('verifyBtn').addEventListener('click', async () => {
+            try {
+                const { text, image } = await storage.verify();
+                const isTextMatch = text === storage.textOriginal || !storage.textCompressed;
+                const isImageMatch = image.startsWith('data:image/png;base64,') || !storage.imageCompressed;
+                document.getElementById('verificationResult').textContent = 
+                    (isTextMatch && isImageMatch) ? '✅ Data verified successfully!' : '❌ Data verification failed!';
+                document.getElementById('verificationResult').style.color = 
+                    (isTextMatch && isImageMatch) ? 'green' : 'red';
+            } catch (error) {
+                document.getElementById('verificationResult').textContent = '❌ ' + error.message;
+                document.getElementById('verificationResult').style.color = 'red';
+            }
+        });
+
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = storage.currentType === 'image' ? 'honeycomb_image.png' : 'honeycomb_text.png';
+            link.href = storage.dataCanvas.toDataURL('image/png', 1.0);
+            link.click();
+            showStatus('Image saved as ' + (storage.currentType === 'image' ? 'honeycomb_image.png' : 'honeycomb_text.png'));
+        });
+
+        document.getElementById('saveBinaryBtn').addEventListener('click', () => {
+            const data = storage.currentType === 'image' ? storage.imageCompressed : storage.textCompressed;
+            if (!data) return;
+            const blob = new Blob([data], { type: 'application/octet-stream' });
+            const link = document.createElement('a');
+            link.download = storage.currentType === 'image' ? 'honeycomb_image.bin' : 'honeycomb_text.bin';
+            link.href = URL.createObjectURL(blob);
+            link.click();
+            showStatus('Binary saved as ' + (storage.currentType === 'image' ? 'honeycomb_image.bin' : 'honeycomb_text.bin'));
+        });
+
+        document.getElementById('textFileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (file.name.endsWith('.txt')) {
+                const reader = new FileReader();
+                reader.onprogress = (event) => {
+                    if (event.lengthComputable) {
+                        const percent = (event.loaded / event.total * 100).toFixed(1);
+                        document.getElementById('inputText').placeholder = `Loading TXT: ${percent}%`;
+                    }
+                };
+                reader.onload = (event) => {
+                    const text = event.target.result;
+                    document.getElementById('inputText').value = text;
+                    originalText = text;
+                    storage.storeText(text).then(() => {
+                        document.getElementById('saveBtn').disabled = false;
+                        document.getElementById('saveBinaryBtn').disabled = false;
+                        document.getElementById('verifyBtn').disabled = false;
+                    });
+                };
+                reader.onerror = () => alert('Failed to read text file');
+                reader.readAsText(file);
+            } else if (file.name.endsWith('.odt')) {
+                const reader = new FileReader();
+                reader.onprogress = (event) => {
+                    if (event.lengthComputable) {
+                        const percent = (event.loaded / event.total * 100).toFixed(1);
+                        document.getElementById('inputText').placeholder = `Loading ODT: ${percent}%`;
+                    }
+                };
+                reader.onload = async (event) => {
+                    try {
+                        const zip = await JSZip.loadAsync(event.target.result);
+                        const contentXml = await zip.file('content.xml').async('string');
+                        const parser = new DOMParser();
+                        const xmlDoc = parser.parseFromString(contentXml, 'text/xml');
+                        const textNodes = xmlDoc.getElementsByTagName('text:p');
+                        const text = Array.from(textNodes).map(node => node.textContent).join('\n');
+                        document.getElementById('inputText').value = text;
+                        originalText = text;
+                        await storage.storeText(text);
+                        document.getElementById('saveBtn').disabled = false;
+                        document.getElementById('saveBinaryBtn').disabled = false;
+                        document.getElementById('verifyBtn').disabled = false;
+                    } catch (error) {
+                        alert('Failed to parse .odt file: ' + error.message);
+                    }
+                };
+                reader.onerror = () => alert('Failed to read .odt file');
+                reader.readAsArrayBuffer(file);
+            } else {
+                alert('Please select a .txt or .odt file');
+            }
+        });
+
+        document.getElementById('imageFileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file || !file.type.startsWith('image/')) {
+                alert('Please select an image file');
+                return;
+            }
+        });
+
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.backgroundColor = '#e3f2fd'; });
+        dropZone.addEventListener('dragleave', () => { dropZone.style.backgroundColor = '#f8f9fa'; });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.backgroundColor = '#f8f9fa';
+            handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+        async function handleFile(file) {
+            if (!file || !file.type.startsWith('image/')) {
+                alert('Please select an image file');
+                return;
+            }
+            try {
+                const { text, image } = await storage.decodeFromFile(file);
+                document.getElementById('decodedText').value = text || 'No text data';
+            } catch (error) {
+                alert('Failed to decode image: ' + error.message);
+            }
+        }
+
+        const binaryDropZone = document.getElementById('binaryDropZone');
+        const binaryFileInput = document.getElementById('binaryFileInput');
+        binaryDropZone.addEventListener('click', () => binaryFileInput.click());
+        binaryDropZone.addEventListener('dragover', (e) => { e.preventDefault(); binaryDropZone.style.backgroundColor = '#e3f2fd'; });
+        binaryDropZone.addEventListener('dragleave', () => { binaryDropZone.style.backgroundColor = '#f8f9fa'; });
+        binaryDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            binaryDropZone.style.backgroundColor = '#f8f9fa';
+            handleBinaryFile(e.dataTransfer.files[0]);
+        });
+        binaryFileInput.addEventListener('change', (e) => handleBinaryFile(e.target.files[0]));
+
+        async function handleBinaryFile(file) {
+            if (!file || !file.name.endsWith('.bin')) {
+                alert('Please select a .bin file');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const decompressed = pako.inflate(new Uint8Array(event.target.result));
+                const text = new TextDecoder().decode(decompressed);
+                document.getElementById('decodedText').value = text;
+                document.getElementById('recoveredSize').textContent = text.length.toLocaleString();
+                document.getElementById('decodeMetrics').style.display = 'block';
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    </script>
+</body>
+</html>
